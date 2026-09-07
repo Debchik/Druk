@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f2e9">
+  <meta name="description" content="Друк — AI-компаньон, которому можно рассказать о своём дне. Он выслушает, запомнит важное и спросит, как всё прошло. Бета в Telegram.">
+  <title>Друк — твой день, твои истории</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js" defer></script>
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">К содержанию</a>
+  <header class="header wrap glass">
+    <a class="brand" href="#" aria-label="Друк — на главную"><span aria-hidden="true">✳</span> друк</a>
+    <nav aria-label="Основная навигация">
+      <a class="about-link" href="#about">О Друке</a>
+      <a class="button button-small" href="#join" data-beta>Подружиться <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow">AI-компаньон · Бета в Telegram</p>
+        <h1 id="hero-title">Твой день.<br>Твои истории.<br>Твой Друк.</h1>
+        <p class="intro">Есть чем поделиться? Друк выслушает, запомнит важное и спросит, как всё прошло.</p>
+        <a class="button" href="#join" data-beta>Подружиться <span aria-hidden="true">↗</span></a>
+        <p class="hint">Оставь заявку на доступ к бета-версии</p>
+      </div>
+      <div class="hero-art">
+        <div class="character"><img src="assets/druk.png" width="1122" height="1402" fetchpriority="high" alt="Друк — улыбающийся каменный персонаж со мхом и светящимся ростком в руках"></div>
+        <div class="hello glass" aria-hidden="true">Как прошёл твой день? <span>🌿</span></div>
+      </div>
+    </section>
+    <section class="about wrap" id="about" aria-labelledby="about-title">
+      <div class="benefits">
+        <p class="eyebrow">Знакомый собеседник, каждый день</p>
+        <h2 id="about-title">Не нужно начинать сначала</h2>
+        <ul class="benefit-list">
+          <li><span class="icon" aria-hidden="true">♡</span><div><h3>Можно просто выговориться</h3><p>Делись радостями и непростыми днями.</p></div></li>
+          <li><span class="icon" aria-hidden="true">☷</span><div><h3>Помнит то, что важно</h3><p>Твои планы и истории остаются в контексте.</p></div></li>
+          <li><span class="icon" aria-hidden="true">↗</span><div><h3>Сам спросит, как ты</h3><p>Вернётся к разговору о важном событии.</p></div></li>
+        </ul>
+      </div>
+      <div class="conversation glass" aria-label="Пример переписки с Друком">
+        <p class="chat-label">Например, так</p>
+        <div class="bubble bubble-user"><p>Завтра важная встреча.<br>Немного волнуюсь.</p><span class="time">21:14</span></div>
+        <p class="day-divider">На следующий день</p>
+        <div class="bubble bubble-druk"><span class="sender">Друк</span><p>Как прошла встреча?<br>Ты вчера переживала 🌿</p><span class="time">09:27</span></div>
+        <p class="chat-footnote">Маленькие детали. Знакомое чувство.</p>
+      </div>
+    </section>
+    <section class="join wrap glass" id="join" aria-labelledby="join-title">
+      <p class="eyebrow">У каждой дружбы есть начало</p>
+      <h2 id="join-title">Начнём с «привет»?</h2>
+      <p>Познакомься с Друком в Telegram.</p>
+      <a class="button" href="#beta-status" data-beta>Подружиться <span aria-hidden="true">↗</span></a>
+      <p class="hint" id="beta-status" role="status" aria-live="polite">Оставь заявку на доступ к бета-версии</p>
+      <noscript><p class="hint">Для перехода к записи в бету включи JavaScript.</p></noscript>
+    </section>
+  </main>
+  <footer class="footer wrap"><a class="brand" href="#"><span aria-hidden="true">✳</span> друк</a><p>AI-компаньон для повседневного общения</p><span class="footer-note">С теплом, Друк</span></footer>
+</body>
+</html>
