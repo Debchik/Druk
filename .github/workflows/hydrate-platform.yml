@@ -24,7 +24,7 @@ jobs:
         run: |
           set -euo pipefail
           cp assets/druk.webp /tmp/druk.webp
-          cat .platform-bundle/* | base64 -d > /tmp/platform.tgz
+          cp .platform-bundle/platform.tgz /tmp/platform.tgz
           echo 'e90d0ba20097c127d4e3985785dea27749f2eebee83b336c3246d4edc5f2f524  /tmp/platform.tgz' | sha256sum -c -
           tar -tzf /tmp/platform.tgz >/dev/null
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
