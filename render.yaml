@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: druk-internal-api
+    runtime: docker
+    branch: internal-platform
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: workspace-files
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: MAX_FILE_SIZE_MIB
+        value: "20"
+      - key: GITHUB_SYNC_COOLDOWN_SECONDS
+        value: "30"

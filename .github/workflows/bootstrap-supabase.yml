@@ -1,0 +1,43 @@
+name: Bootstrap Supabase workspace
+on:
+  workflow_dispatch:
+    inputs:
+      user_1_uuid:
+        description: 'UUID первого пользователя Supabase Auth'
+        required: true
+        type: string
+      user_2_uuid:
+        description: 'UUID второго пользователя Supabase Auth'
+        required: true
+        type: string
+      user_1_name:
+        description: 'Имя первого сооснователя'
+        required: false
+        default: 'Сооснователь 1'
+        type: string
+      user_2_name:
+        description: 'Имя второго сооснователя'
+        required: false
+        default: 'Сооснователь 2'
+        type: string
+permissions:
+  contents: read
+jobs:
+  bootstrap:
+    if: github.ref == 'refs/heads/internal-platform'
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      BOOTSTRAP_USER_IDS: ${{ inputs.user_1_uuid }},${{ inputs.user_2_uuid }}
+      BOOTSTRAP_DISPLAY_NAMES: ${{ inputs.user_1_name }},${{ inputs.user_2_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install httpx==0.28.1
+      - name: Validate secrets
+        run: |
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_SERVICE_ROLE_KEY"
+      - run: python scripts/bootstrap_workspace.py
