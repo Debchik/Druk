@@ -258,3 +258,7 @@ Frontend CI выполняет `npm install`, lint, typecheck, Vitest и product
 8. В Supabase Auth добавить production GitHub Pages URL в Site URL / Redirect URLs, если это требуется конфигурацией Auth.
 9. Запустить `Deploy internal platform to Pages` с ветки `internal-platform`.
 10. Войти обоими аккаунтами и проверить доступ, RLS, файлы, задачу и программу.
+
+## Статус публикации исходников
+
+Ветка `internal-platform` проходит обязательный GitHub Actions CI на каждый push: backend compile/tests и frontend lint/typecheck/tests/production build. Публичный Pages deploy запускается отдельно только после настройки Supabase и backend URL.
