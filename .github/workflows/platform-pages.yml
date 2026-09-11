@@ -1,4 +1,4 @@
-name: Deploy internal platform to Pages
+name: Deploy public landing + internal platform to Pages
 on:
   workflow_dispatch:
   push:
@@ -20,9 +20,15 @@ jobs:
       VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || 'https://wjtdlwatvknsrenlelyh.supabase.co' }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
       VITE_API_URL: ${{ vars.VITE_API_URL || 'https://druk-internal-api.onrender.com/api/v1' }}
-      VITE_BASE_PATH: /${{ github.event.repository.name }}/
+      VITE_BASE_PATH: /${{ github.event.repository.name }}/internal/
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout internal platform
+        uses: actions/checkout@v4
+      - name: Checkout public landing from main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: public-landing
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
       - name: Validate configuration
@@ -34,10 +40,16 @@ jobs:
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
+      - name: Assemble Pages artifact
+        run: |
+          mkdir -p site/internal
+          rsync -a --exclude='.git' --exclude='.github' --exclude='README.md' public-landing/ site/
+          cp -a frontend/dist/. site/internal/
+          touch site/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: frontend/dist
+          path: site
   deploy:
     needs: build
     environment:
