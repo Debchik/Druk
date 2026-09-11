@@ -17,7 +17,7 @@ jobs:
     if: github.ref == 'refs/heads/internal-platform'
     runs-on: ubuntu-latest
     env:
-      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || 'https://wjtdlwatvknsrenlelyh.supabase.co' }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
       VITE_API_URL: ${{ vars.VITE_API_URL || 'https://druk-internal-api.onrender.com/api/v1' }}
       VITE_BASE_PATH: /${{ github.event.repository.name }}/
