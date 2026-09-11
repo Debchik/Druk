@@ -1,6 +1,10 @@
 name: Deploy internal platform to Pages
 on:
   workflow_dispatch:
+  push:
+    branches: [internal-platform]
+    paths:
+      - '.github/workflows/platform-pages.yml'
 permissions:
   contents: read
   pages: write
@@ -15,7 +19,7 @@ jobs:
     env:
       VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
-      VITE_API_URL: ${{ vars.VITE_API_URL }}
+      VITE_API_URL: ${{ vars.VITE_API_URL || 'https://druk-internal-api.onrender.com/api/v1' }}
       VITE_BASE_PATH: /${{ github.event.repository.name }}/
     steps:
       - uses: actions/checkout@v4
