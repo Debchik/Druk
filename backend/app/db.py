@@ -9,7 +9,7 @@ class SupabaseClient:
         self.settings = get_settings()
         self.token = token
         self.headers = {
-            "apikey": self.settings.supabase_anon_key,
+            "apikey": self.settings.supabase_publishable_key,
             "Authorization": f"Bearer {token}",
             "Accept": "application/json",
         }

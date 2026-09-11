@@ -9,7 +9,7 @@ on:
       - 'supabase/**'
       - '.github/workflows/platform-ci.yml'
 permissions:
-  contents: write
+  contents: read
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -18,7 +18,7 @@ jobs:
         working-directory: backend
     env:
       SUPABASE_URL: https://example.supabase.co
-      SUPABASE_ANON_KEY: ci-placeholder-key-xxxxxxxxxxxx
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder_0123456789
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -33,25 +33,14 @@ jobs:
         working-directory: frontend
     env:
       VITE_SUPABASE_URL: https://example.supabase.co
-      VITE_SUPABASE_ANON_KEY: ci-placeholder-key-xxxxxxxxxxxx
+      VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder_0123456789
       VITE_API_URL: https://example.com/api/v1
       VITE_BASE_PATH: /Druk/
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '22', cache: 'npm', cache-dependency-path: frontend/package.json }
-      - run: if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
-      - name: Commit generated lockfile and remove CI trigger
-        if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
-        run: |
-          if ! git ls-files --error-unmatch package-lock.json >/dev/null 2>&1; then
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add package-lock.json
-            git rm -f ../.github/CI_TRIGGER 2>/dev/null || true
-            git commit -m 'Add frontend lockfile'
-            git push origin HEAD:internal-platform
-          fi
+        with: { node-version: '22', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
+      - run: npm ci --no-audit --no-fund
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test

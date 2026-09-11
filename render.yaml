@@ -12,7 +12,7 @@ services:
         value: production
       - key: SUPABASE_URL
         sync: false
-      - key: SUPABASE_ANON_KEY
+      - key: SUPABASE_PUBLISHABLE_KEY
         sync: false
       - key: SUPABASE_STORAGE_BUCKET
         value: workspace-files

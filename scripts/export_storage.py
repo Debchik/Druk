@@ -4,7 +4,7 @@ from pathlib import Path
 import httpx
 
 url=os.environ['SUPABASE_URL'].rstrip('/')
-key=os.environ['SUPABASE_ANON_KEY']
+key=os.environ['SUPABASE_PUBLISHABLE_KEY']
 token=os.environ['USER_ACCESS_TOKEN']
 workspace=os.environ['WORKSPACE_ID']
 out=Path(os.getenv('OUTPUT_DIR','storage-backup'));out.mkdir(parents=True,exist_ok=True)

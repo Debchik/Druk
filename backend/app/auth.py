@@ -24,7 +24,7 @@ async def current_user(authorization: str | None = Header(default=None)) -> Curr
         try:
             r = await client.get(
                 f"{settings.supabase_url.rstrip('/')}/auth/v1/user",
-                headers={"apikey": settings.supabase_anon_key, "Authorization": f"Bearer {token}"},
+                headers={"apikey": settings.supabase_publishable_key, "Authorization": f"Bearer {token}"},
             )
         except httpx.HTTPError as e:
             raise AppError(502, "AUTH_UNAVAILABLE", "Сервис авторизации временно недоступен") from e

@@ -2,95 +2,99 @@
 
 Закрытое рабочее пространство для двух сооснователей: задачи, программы и заявки, база ответов, приватные файлы, встречи/решения и read-only GitHub Issues.
 
-Ветка для платформы: `internal-platform`. Существующий лендинг в `main` намеренно не заменяется до отдельного запуска GitHub Pages workflow.
+Ветка платформы: `internal-platform`. Лендинг в `main` не заменяется до отдельного ручного GitHub Pages deploy.
+
+## Supabase: только новые API keys
+
+Проект использует новую схему Supabase API keys и не требует legacy `anon` / `service_role` ключей:
+
+- `sb_publishable_...` — публичный ключ приложения. Используется во frontend и backend как `apikey`; доступ пользователя по-прежнему ограничивается RLS.
+- `sb_secret_...` — административный ключ. Используется только для одноразового bootstrap workspace и никогда не попадает во frontend или обычный backend runtime.
+- User JWT после входа передаётся отдельно как `Authorization: Bearer <user-jwt>`.
+
+Новые API keys являются opaque strings, а не JWT. Поэтому `sb_secret_...` не отправляется как `Authorization: Bearer ...`; bootstrap передаёт его только в заголовке `apikey`.
+
+Backend сам не декодирует и не подписывает пользовательские JWT: он проверяет сессию через Supabase Auth `/auth/v1/user`. Поэтому приложение не зависит от legacy JWT secret и совместимо с новыми asymmetric JWT signing keys Supabase.
 
 ## Архитектура
 
 ```text
 GitHub Pages: React + TypeScript + Vite + HashRouter
         │
-        ├── Supabase Auth (email/password, без публичной регистрации)
+        ├── Supabase Auth + sb_publishable_...
         │
         └── Authorization: Bearer <user JWT>
                       │
                       ▼
                  FastAPI
-                   ├── проверяет JWT через Supabase Auth /auth/v1/user
-                   ├── проверяет workspace membership
-                   ├── PostgREST с тем же user JWT → PostgreSQL + RLS
-                   ├── приватный Supabase Storage
+                   ├── /auth/v1/user: проверка пользовательской сессии
+                   ├── workspace membership
+                   ├── PostgREST: publishable apikey + user JWT → RLS
+                   ├── private Supabase Storage
                    └── GitHub REST API (server-side token)
 ```
-
-Service role не используется в обычном backend CRUD. Он нужен только для одноразового bootstrap workspace, если используется `scripts/bootstrap_workspace.py` или соответствующий manual workflow.
 
 ## Что реализовано
 
 - Supabase Auth + закрытый workspace для двух участников;
 - RLS для бизнес-таблиц и Storage;
-- dashboard: проект, быстрые ссылки, недельный фокус, задачи, дедлайны, последние решения;
-- задачи с ответственным, статусом, неделей, дедлайном и блокировкой;
-- программы, чек-листы, статусы, архив;
-- общая база ответов + поиск по вопросу/ответу/keywords;
-- независимое копирование ответа из библиотеки в заявку;
-- immutable snapshot отправленной заявки;
-- приватные общие файлы и документы программы;
-- актуальная презентация как file ID + временный signed URL;
+- dashboard, задачи, дедлайны и недельный фокус;
+- программы, чек-листы, статусы, архив и submission snapshots;
+- база ответов и копирование ответов в заявку;
+- приватные общие файлы и документы программ;
 - встречи и решения;
-- GitHub Issues read-only: pagination, PR exclusion, cache, stale/error state, cooldown;
-- versioned JSON export;
-- Storage backup script;
+- GitHub Issues read-only с pagination/cache/stale state;
+- JSON export + Storage backup script;
 - FastAPI Dockerfile + Render Blueprint;
-- GitHub Actions: CI, Supabase bootstrap, Render deploy hook, GitHub Pages deployment.
+- GitHub Actions: CI, Supabase bootstrap, Render hook, GitHub Pages deploy.
 
-Не реализованы намеренно: LLM/AI, semantic search, transcription, GitHub Projects, двусторонняя GitHub sync, billing, realtime collaborative editing.
+## 1. Supabase setup
 
-## Структура
+### 1.1 Пользователи
 
-```text
-frontend/                 React + TypeScript + Vite
-backend/                  FastAPI
-supabase/migrations/      schema + RLS + private Storage policies
-scripts/                  bootstrap + Storage export
-.github/workflows/        CI / bootstrap / Pages / Render hook
-render.yaml               Render Blueprint
-```
+В Supabase Authentication вручную создайте два email/password аккаунта. Публичной регистрации в UI нет.
 
-## 1. Supabase
+### 1.2 Миграция
 
-### 1.1 Создать проект и пользователей
-
-Создайте Supabase project. В Authentication создайте два email/password аккаунта вручную. Публичной регистрации в UI приложения нет.
-
-### 1.2 Применить миграцию
-
-На чистом проекте выполните:
+На чистом Supabase project примените:
 
 ```text
 supabase/migrations/001_init.sql
 ```
 
-Она создаёт таблицы, индексы, ограничения, search RPC, private bucket `workspace-files`, RLS policies и Storage policies.
+Она создаёт таблицы, индексы, ограничения, search RPC, private bucket `workspace-files`, RLS и Storage policies.
 
-### 1.3 Добавить двух сооснователей
+### 1.3 Bootstrap двух сооснователей
 
-Есть два варианта.
+В GitHub Repository Settings добавьте:
 
-**A. Через GitHub Actions:** добавьте Repository Secrets `SUPABASE_URL` и `SUPABASE_SERVICE_ROLE_KEY`, затем на ветке `internal-platform` вручную запустите workflow `Bootstrap Supabase workspace` и передайте два UUID как inputs. UUID не нужно коммитить.
+**Actions Variable**
 
-**B. Локально:**
+```text
+VITE_SUPABASE_URL
+```
+
+**Actions Secret**
+
+```text
+SUPABASE_SECRET_KEY=sb_secret_...
+```
+
+После этого вручную запустите workflow `Bootstrap Supabase workspace` из ветки `internal-platform` и передайте UUID двух Auth users. UUID не коммитятся.
+
+Локальный вариант:
 
 ```bash
-export SUPABASE_URL=...
-export SUPABASE_SERVICE_ROLE_KEY=...
+export SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+export SUPABASE_SECRET_KEY=sb_secret_...
 export BOOTSTRAP_USER_IDS=<uuid1>,<uuid2>
 export BOOTSTRAP_DISPLAY_NAMES='Имя 1,Имя 2'
 python scripts/bootstrap_workspace.py
 ```
 
-Реальные UUID и service role key не должны попадать в git.
+## 2. Backend
 
-## 2. Backend локально
+Локально:
 
 ```bash
 cd backend
@@ -101,82 +105,77 @@ cp .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
-Health: `GET /health`. OpenAPI: `/docs` в development.
-
-### Backend env
+Runtime env:
 
 | Переменная | Секрет | Назначение |
 |---|---:|---|
 | `ENVIRONMENT` | нет | `development` / `production` |
-| `SUPABASE_URL` | нет | URL Supabase project |
-| `SUPABASE_ANON_KEY` | нет* | publishable/anon key, сам по себе не даёт доступа |
+| `SUPABASE_URL` | нет | Supabase project URL |
+| `SUPABASE_PUBLISHABLE_KEY` | нет | новый `sb_publishable_...` key |
 | `SUPABASE_STORAGE_BUCKET` | нет | обычно `workspace-files` |
-| `GITHUB_TOKEN` | да | fine-grained token только на чтение нужных репозиториев/Issues |
-| `CORS_ORIGINS` | нет | точные origins через запятую |
+| `GITHUB_TOKEN` | да | fine-grained token с read-only доступом к нужным Issues |
+| `CORS_ORIGINS` | нет | разрешённые frontend origins через запятую |
 | `MAX_FILE_SIZE_MIB` | нет | default `20` |
 | `GITHUB_SYNC_COOLDOWN_SECONDS` | нет | default `30` |
 
-`SUPABASE_SERVICE_ROLE_KEY` не нужен работающему backend.
+`SUPABASE_SECRET_KEY` работающему backend не нужен. CRUD выполняется от имени вошедшего пользователя, чтобы RLS оставался реальной границей безопасности.
 
-## 3. Frontend локально
+## 3. Frontend
 
 ```bash
 cd frontend
-npm install
+npm ci
 cp .env.example .env.local
 npm run dev
 ```
 
-### Frontend variables
+Frontend env:
 
-| Переменная | Назначение |
-|---|---|
-| `VITE_SUPABASE_URL` | публичный Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | публичный publishable/anon key |
-| `VITE_API_URL` | URL FastAPI с `/api/v1`, например `https://...onrender.com/api/v1` |
-| `VITE_BASE_PATH` | `/Druk/` для project Pages |
+```text
+VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+VITE_API_URL=http://localhost:8000/api/v1
+VITE_BASE_PATH=/
+```
 
-Никакие server-side secrets не должны начинаться с `VITE_`.
+Frontend валидирует, что передан именно ключ с префиксом `sb_publishable_`. Никакой `sb_secret_...` не должен иметь префикс `VITE_`.
 
-## 4. GitHub Secrets/Variables, которые нужны для публикации
+## 4. GitHub Actions configuration
 
-### Repository → Settings → Secrets and variables → Actions → Variables
+### Variables
 
 ```text
 VITE_SUPABASE_URL
-VITE_SUPABASE_ANON_KEY
+VITE_SUPABASE_PUBLISHABLE_KEY
 VITE_API_URL
 ```
 
-Это значения, которые попадут в публичный frontend bundle; секретами они не считаются.
+`VITE_API_URL` появится после публикации backend.
 
-### Repository → Settings → Secrets and variables → Actions → Secrets
-
-Для одноразового bootstrap через workflow:
+### Secrets
 
 ```text
-SUPABASE_URL
-SUPABASE_SERVICE_ROLE_KEY
+SUPABASE_SECRET_KEY
 ```
 
-Опционально, если Render service уже создан и нужно запускать его deploy из GitHub:
+Опционально:
 
 ```text
 RENDER_DEPLOY_HOOK_URL
 ```
 
-Не кладите в обычные GitHub Variables: database password, service role, GitHub fine-grained token.
+Legacy variables `VITE_SUPABASE_ANON_KEY`, `SUPABASE_ANON_KEY` и `SUPABASE_SERVICE_ROLE_KEY` больше нигде не используются.
 
-## 5. Backend на Render
+## 5. Render backend
 
-`render.yaml` описывает Docker Web Service из ветки `internal-platform`.
+`render.yaml` описывает Docker Web Service из `internal-platform`.
 
-В Render runtime environment задайте:
+В Render задайте:
 
 ```text
 ENVIRONMENT=production
-SUPABASE_URL=...
-SUPABASE_ANON_KEY=...
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_STORAGE_BUCKET=workspace-files
 GITHUB_TOKEN=...
 CORS_ORIGINS=https://<github-login>.github.io
@@ -184,81 +183,61 @@ MAX_FILE_SIZE_MIB=20
 GITHUB_SYNC_COOLDOWN_SECONDS=30
 ```
 
-Render должен собирать `backend/Dockerfile`. Health check: `/health`. Backend слушает `0.0.0.0:${PORT}`.
+Secret key в Render не нужен.
 
-После создания сервиса возьмите URL вида `https://<service>.onrender.com/api/v1` и сохраните его как GitHub Actions Variable `VITE_API_URL`.
-
-Если создан Deploy Hook, его URL можно сохранить как Repository Secret `RENDER_DEPLOY_HOOK_URL` и использовать workflow `Trigger Render backend deploy`.
+После создания сервиса сохраните URL вида `https://<service>.onrender.com/api/v1` как GitHub Actions Variable `VITE_API_URL`.
 
 ## 6. GitHub Pages
 
-Frontend использует `HashRouter`, поэтому deep links работают как:
+Frontend использует `HashRouter`, поэтому deep links имеют вид:
 
 ```text
 https://<login>.github.io/Druk/#/programs/<id>
 ```
 
-Публикация намеренно только ручная: workflow `Deploy internal platform to Pages` запускается с ветки `internal-platform` после заполнения `VITE_*` variables и готовности backend.
+Workflow `Deploy internal platform to Pages` запускается вручную из `internal-platform`. Он требует `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` и `VITE_API_URL`.
 
-Важно: GitHub Pages для репозитория один. Запуск этого workflow заменит текущую Pages-публикацию лендинга этого репозитория. Код лендинга остаётся в `main`, но публичный Pages artifact будет платформой, пока не выполнен другой deploy.
+GitHub Pages для репозитория один: такой deploy заменит текущий Pages artifact лендинга, хотя код лендинга останется в `main`.
 
-## 7. GitHub Issues
+## 7. Backup
 
-Backend использует только `GITHUB_TOKEN`. Рекомендуется fine-grained token с минимальным доступом к выбранным repositories и read-only Issues/metadata.
-
-Пользователь добавляет `owner/repository` в Settings платформы. Токен никогда не попадает в браузер.
-
-## 8. Файлы
-
-Поддерживаются PDF, PPT/PPTX, DOC/DOCX, XLS/XLSX, TXT, CSV, PNG, JPEG, WebP. Default limit 20 MiB.
-
-Путь Storage содержит `workspace_id` и случайный UUID. Исходное имя хранится только в metadata. Bucket приватный. Signed URLs живут 5 минут.
-
-Антивирус не реализован. Backend проверяет размер, расширение и базовую сигнатуру поддерживаемых форматов; HTML/SVG/archives не принимаются.
-
-## 9. Экспорт и backup
-
-UI экспортирует JSON с данными workspace и метаданными файлов, но не бинарники.
-
-Для бинарников:
+Для бинарников Storage:
 
 ```bash
 export SUPABASE_URL=...
-export SUPABASE_ANON_KEY=...
+export SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 export USER_ACCESS_TOKEN=...
 export WORKSPACE_ID=...
 python scripts/export_storage.py
 ```
 
-Получается каталог файлов + `manifest.json`.
+## 8. Проверки
 
-## 10. Проверки
-
-Backend локально:
+Backend CI:
 
 ```bash
 SUPABASE_URL=https://example.supabase.co \
-SUPABASE_ANON_KEY=ci-placeholder-key-xxxxxxxxxxxx \
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_ci_placeholder_0123456789 \
 PYTHONPATH=backend pytest backend/tests -q -m 'not integration'
 ```
 
-RLS integration test запускается отдельно только против test Supabase project.
+Frontend CI выполняет `npm ci`, ESLint, TypeScript typecheck, Vitest и production build. На каждый push в `internal-platform` оба CI job должны быть зелёными.
 
-Frontend CI выполняет `npm install`, lint, typecheck, Vitest и production build. В текущем рабочем окружении npm registry может быть недоступен, поэтому окончательная frontend-проверка выполняется в GitHub Actions после push.
+Отдельный RLS integration test ожидает `RLS_SUPABASE_URL`, `RLS_SUPABASE_PUBLISHABLE_KEY`, `RLS_NON_MEMBER_TOKEN`, `RLS_WORKSPACE_ID`.
 
-## 11. Порядок production setup
+## 9. Production sequence
 
-1. Код в `internal-platform`.
-2. Создать Supabase project и два Auth users.
-3. Применить `001_init.sql`.
-4. Bootstrap двух UUID.
-5. Создать Render service из `internal-platform` и заполнить backend env.
+1. Создать Supabase project и двух Auth users.
+2. Применить `supabase/migrations/001_init.sql`.
+3. Добавить `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` и secret `SUPABASE_SECRET_KEY` в GitHub.
+4. Выполнить bootstrap двух UUID.
+5. Создать Render service и задать backend env.
 6. Проверить `/health`.
-7. Добавить `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL` в GitHub Actions Variables.
-8. В Supabase Auth добавить production GitHub Pages URL в Site URL / Redirect URLs, если это требуется конфигурацией Auth.
-9. Запустить `Deploy internal platform to Pages` с ветки `internal-platform`.
-10. Войти обоими аккаунтами и проверить доступ, RLS, файлы, задачу и программу.
+7. Сохранить Render `/api/v1` URL как `VITE_API_URL`.
+8. При необходимости настроить Supabase Auth Site URL / Redirect URLs для GitHub Pages.
+9. Запустить `Deploy internal platform to Pages`.
+10. Проверить вход обоими аккаунтами, RLS, файлы, задачу и программу.
 
-## Статус публикации исходников
+## Security note
 
-Ветка `internal-platform` проходит обязательный GitHub Actions CI на каждый push: backend compile/tests и frontend lint/typecheck/tests/production build. Публичный Pages deploy запускается отдельно только после настройки Supabase и backend URL.
+Publishable key безопасно размещать в браузере только при корректном RLS. Secret key обходит RLS и должен оставаться только в доверенной server-side среде. После перехода можно отключить legacy `anon`/`service_role` keys в Supabase Dashboard, когда Last used показывает, что они больше нигде не используются.

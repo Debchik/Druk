@@ -27,8 +27,8 @@ jobs:
     if: github.ref == 'refs/heads/internal-platform'
     runs-on: ubuntu-latest
     env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       BOOTSTRAP_USER_IDS: ${{ inputs.user_1_uuid }},${{ inputs.user_2_uuid }}
       BOOTSTRAP_DISPLAY_NAMES: ${{ inputs.user_1_name }},${{ inputs.user_2_name }}
     steps:
@@ -36,8 +36,8 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: pip install httpx==0.28.1
-      - name: Validate secrets
+      - name: Validate new Supabase keys
         run: |
           test -n "$SUPABASE_URL"
-          test -n "$SUPABASE_SERVICE_ROLE_KEY"
+          case "$SUPABASE_SECRET_KEY" in sb_secret_*) ;; *) echo 'SUPABASE_SECRET_KEY must start with sb_secret_' >&2; exit 1;; esac
       - run: python scripts/bootstrap_workspace.py
