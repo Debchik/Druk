@@ -1,0 +1,20 @@
+/* Generated Druk artwork placement */
+.home-hero .hero-visual{background-position:72% center;background-size:cover}
+.programs-banner .banner-side{background-position:72% center;background-size:cover}
+.events-banner .banner-side{background-position:38% center;background-size:cover}
+.answers-banner .banner-side{background-position:68% center;background-size:cover}
+.presentation-art{background-position:69% center;background-size:cover}
+.settings-banner>div:last-child{background-position:72% center;background-size:cover}
+.sidebar-art{background-position:center 72%;background-size:cover}
+.nature-note{background-position:center center;background-size:cover}
+.auth-card>img{object-fit:contain;object-position:center}
+@media(min-width:1500px){
+  .home-hero .hero-visual{background-position:76% center}
+  .programs-banner .banner-side,.settings-banner>div:last-child{background-position:76% center}
+  .events-banner .banner-side{background-position:34% center}
+}
+@media(max-width:680px){
+  .home-hero .hero-visual{background-position:75% center}
+  .programs-banner .banner-side,.settings-banner>div:last-child{background-position:75% center}
+  .events-banner .banner-side{background-position:38% center}
+}
