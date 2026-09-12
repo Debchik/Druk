@@ -1,4 +1,4 @@
-from .core import app
+from .core import app, fetch_github_issues, httpx, settings
 from .extended import router
 
 app.include_router(router)
