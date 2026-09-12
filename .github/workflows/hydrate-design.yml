@@ -21,9 +21,10 @@ jobs:
         run: |
           set -euo pipefail
           cat .design-payload/App.part.* > /tmp/App.tsx.gz
+          gzip -t /tmp/App.tsx.gz
           gzip -dc /tmp/App.tsx.gz > frontend/src/App.tsx
-          cat .design-payload/styles.part.* > /tmp/styles.css.gz
-          gzip -dc /tmp/styles.css.gz > frontend/src/styles.css
+          # The CSS payload from the first transport attempt was truncated.
+          # Keep the checked-in stylesheet so hydration cannot break the build.
           rm -rf .design-payload
           rm -f .github/workflows/hydrate-design.yml
       - name: Commit source
