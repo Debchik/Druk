@@ -1,2 +1,2 @@
 /// <reference types="vite/client" />
-// deploy marker: dashboard artwork, interactive deadlines, checklist and favicon
+// deploy marker: bug report, theme switch and attention center
