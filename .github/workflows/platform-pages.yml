@@ -23,14 +23,14 @@ jobs:
       VITE_BASE_PATH: /${{ github.event.repository.name }}/internal/
     steps:
       - name: Checkout internal platform
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Checkout public landing from main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
           path: public-landing
-      - uses: actions/setup-node@v4
-        with: { node-version: '22', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
+      - uses: actions/setup-node@v7
+        with: { node-version: '24', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
       - name: Validate configuration
         run: |
           test -n "$VITE_SUPABASE_URL"
@@ -46,8 +46,8 @@ jobs:
           rsync -a --exclude='.git' --exclude='.github' --exclude='README.md' public-landing/ site/
           cp -a frontend/dist/. site/internal/
           touch site/.nojekyll
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
   deploy:
@@ -59,4 +59,4 @@ jobs:
     steps:
       - name: Deploy
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
