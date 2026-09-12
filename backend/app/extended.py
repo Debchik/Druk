@@ -101,6 +101,96 @@ class FileLink(BaseModel):
     file_id: str
 
 
+CommentEntity = Literal["answer", "program_answer", "file"]
+COMMENT_TABLES: dict[str, str] = {
+    "answer": "answer_library",
+    "program_answer": "program_answers",
+    "file": "files",
+}
+
+
+class CommentCreate(BaseModel):
+    entity_type: CommentEntity
+    entity_id: str
+    body: str = Field(min_length=1, max_length=10000)
+
+
+class CommentPatch(BaseModel):
+    body: str = Field(min_length=1, max_length=10000)
+
+
+async def ensure_comment_target(db: SupabaseClient, user: CurrentUser, entity_type: str, entity_id: str):
+    table = COMMENT_TABLES.get(entity_type)
+    if not table:
+        raise AppError(422, "INVALID_COMMENT_TARGET", "Некорректный тип объекта комментария")
+    await owned(db, table, user, entity_id)
+
+
+@router.get("/comments")
+async def list_comments(
+    entity_type: CommentEntity = Query(...),
+    entity_id: str = Query(...),
+    user: CurrentUser = Depends(current_user),
+):
+    db = db_for(user)
+    await ensure_comment_target(db, user, entity_type, entity_id)
+    rows = await db.select(
+        "entity_comments",
+        filters={"workspace_id": user.workspace_id, "entity_type": entity_type, "entity_id": entity_id},
+        order="created_at.asc",
+    )
+    members = await db.select(
+        "workspace_members",
+        filters={"workspace_id": user.workspace_id},
+        select="user_id,display_name",
+    )
+    names = {row["user_id"]: row["display_name"] for row in members}
+    for row in rows:
+        row["author_name"] = names.get(row.get("created_by"), "Участник")
+        row["can_edit"] = row.get("created_by") == user.id
+    return rows
+
+
+@router.post("/comments", status_code=201)
+async def create_comment(body: CommentCreate, user: CurrentUser = Depends(current_user)):
+    db = db_for(user)
+    await ensure_comment_target(db, user, body.entity_type, body.entity_id)
+    rows = await db.insert("entity_comments", {
+        "workspace_id": user.workspace_id,
+        "entity_type": body.entity_type,
+        "entity_id": body.entity_id,
+        "body": body.body.strip(),
+        "created_by": user.id,
+    })
+    row = rows[0]
+    row["author_name"] = user.display_name
+    row["can_edit"] = True
+    return row
+
+
+@router.patch("/comments/{comment_id}")
+async def patch_comment(comment_id: str, body: CommentPatch, user: CurrentUser = Depends(current_user)):
+    db = db_for(user)
+    comment = await owned(db, "entity_comments", user, comment_id)
+    if comment.get("created_by") != user.id:
+        raise AppError(403, "COMMENT_FORBIDDEN", "Можно редактировать только свои комментарии")
+    rows = await db.patch(
+        "entity_comments",
+        {"id": comment_id, "workspace_id": user.workspace_id, "created_by": user.id},
+        {"body": body.body.strip()},
+    )
+    return rows[0]
+
+
+@router.delete("/comments/{comment_id}", status_code=204)
+async def delete_comment(comment_id: str, user: CurrentUser = Depends(current_user)):
+    db = db_for(user)
+    comment = await owned(db, "entity_comments", user, comment_id)
+    if comment.get("created_by") != user.id:
+        raise AppError(403, "COMMENT_FORBIDDEN", "Можно удалить только свой комментарий")
+    await db.delete("entity_comments", {"id": comment_id, "workspace_id": user.workspace_id, "created_by": user.id})
+
+
 @router.get("/team")
 async def team(user: CurrentUser = Depends(current_user)):
     return await db_for(user).select(
