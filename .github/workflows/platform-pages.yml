@@ -4,6 +4,7 @@ on:
   push:
     branches: [internal-platform]
     paths:
+      - 'frontend/**'
       - '.github/workflows/platform-pages.yml'
 permissions:
   contents: read
