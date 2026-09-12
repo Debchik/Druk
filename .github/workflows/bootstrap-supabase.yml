@@ -32,8 +32,8 @@ jobs:
       BOOTSTRAP_USER_IDS: ${{ inputs.user_1_uuid }},${{ inputs.user_2_uuid }}
       BOOTSTRAP_DISPLAY_NAMES: ${{ inputs.user_1_name }},${{ inputs.user_2_name }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with: { python-version: '3.12' }
       - run: pip install httpx==0.28.1
       - name: Validate new Supabase keys
