@@ -6,7 +6,7 @@ const Env = z.object({
   VITE_SUPABASE_PUBLISHABLE_KEY: z.string().refine((value) => value.startsWith('sb_publishable_'), {
     message: 'Use the new Supabase publishable key (sb_publishable_...)',
   }),
-  VITE_API_URL: z.string().url(),
+  VITE_API_URL: z.preprocess((value) => value === '' ? undefined : value, z.string().url().optional()),
 })
 export const env = Env.parse(import.meta.env)
 export const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY, {
