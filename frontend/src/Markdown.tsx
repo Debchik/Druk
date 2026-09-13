@@ -1,16 +1,17 @@
 import type { ReactNode } from 'react'
 
-type InlineToken={raw:string;kind:'image'|'link'|'autolink'|'bold'|'strike'|'code'|'italic'|'wiki';a?:string;b?:string}
+type InlineToken={raw:string;kind:'image'|'link'|'autolink'|'bold'|'strike'|'highlight'|'code'|'italic'|'wiki';a?:string;b?:string}
 
 function tokenAt(text:string):InlineToken|null{
   const rules:Array<[RegExp,(m:RegExpMatchArray)=>InlineToken]>=[
     [/^!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/,m=>({raw:m[0],kind:'image',a:m[1],b:m[2]})],
     [/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/,m=>({raw:m[0],kind:'link',a:m[1],b:m[2]})],
     [/^<(https?:\/\/[^>\s]+)>/,m=>({raw:m[0],kind:'autolink',a:m[1]})],
-    [/^\[\[([^\]]+)\]\]/,m=>({raw:m[0],kind:'wiki',a:m[1]})],
+    [/^\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/,m=>({raw:m[0],kind:'wiki',a:m[2]||m[1],b:m[1]})],
     [/^\*\*(.+?)\*\*/,m=>({raw:m[0],kind:'bold',a:m[1]})],
     [/^__(.+?)__/,m=>({raw:m[0],kind:'bold',a:m[1]})],
     [/^~~(.+?)~~/,m=>({raw:m[0],kind:'strike',a:m[1]})],
+    [/^==(.+?)==/,m=>({raw:m[0],kind:'highlight',a:m[1]})],
     [/^`([^`]+)`/,m=>({raw:m[0],kind:'code',a:m[1]})],
     [/^\*([^*\n]+)\*/,m=>({raw:m[0],kind:'italic',a:m[1]})],
     [/^_([^_\n]+)_/,m=>({raw:m[0],kind:'italic',a:m[1]})],
@@ -23,16 +24,17 @@ function inline(text:string,key='i'):ReactNode[]{
   const out:ReactNode[]=[];let plain='',n=0,i=0
   const flush=()=>{if(plain){out.push(plain);plain=''}}
   while(i<text.length){
-    if(text[i]==='\\'&&i+1<text.length&&'\\`*_{}[]()#+-.!|>~'.includes(text[i+1])){plain+=text[i+1];i+=2;continue}
+    if(text[i]==='\\'&&i+1<text.length&&'\\`*_{}[]()#+-.!|>~='.includes(text[i+1])){plain+=text[i+1];i+=2;continue}
     const token=tokenAt(text.slice(i))
     if(!token){plain+=text[i++];continue}
     flush();const k=`${key}-${n++}`
     if(token.kind==='image')out.push(<img key={k} className="markdown-image" src={token.b} alt={token.a||''} loading="lazy"/> )
     else if(token.kind==='link')out.push(<a key={k} href={token.b} target="_blank" rel="noreferrer">{inline(token.a||'',`${k}-l`)}</a>)
     else if(token.kind==='autolink')out.push(<a key={k} href={token.a} target="_blank" rel="noreferrer">{token.a}</a>)
-    else if(token.kind==='wiki')out.push(<span key={k} className="markdown-wikilink">{token.a}</span>)
+    else if(token.kind==='wiki')out.push(<span key={k} className="markdown-wikilink" title={token.b}>{token.a}</span>)
     else if(token.kind==='bold')out.push(<strong key={k}>{inline(token.a||'',`${k}-b`)}</strong>)
     else if(token.kind==='strike')out.push(<del key={k}>{inline(token.a||'',`${k}-s`)}</del>)
+    else if(token.kind==='highlight')out.push(<mark key={k}>{inline(token.a||'',`${k}-m`)}</mark>)
     else if(token.kind==='code')out.push(<code key={k}>{token.a}</code>)
     else out.push(<em key={k}>{inline(token.a||'',`${k}-e`)}</em>)
     i+=token.raw.length
