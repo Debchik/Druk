@@ -65,7 +65,15 @@ async function directApi(path:string,init:RequestInit):Promise<any|typeof MISS>{
   const method=(init.method||'GET').toUpperCase(),url=new URL(path,'https://druk.local'),p=url.pathname,b=bodyOf(init),c=await context(),ws=c.workspace_id,table=(name:string)=>supabase.from(name)
   if(p==='/me'&&method==='GET')return c
   if((p==='/team'||p==='/members')&&method==='GET')return dataOf(await table('workspace_members').select(p==='/team'?'user_id,display_name,role':'user_id,display_name').eq('workspace_id',ws).order('display_name'))
-  if(p==='/settings'){if(method==='GET')return dataOf(await table('project_settings').select('*').eq('workspace_id',ws).maybeSingle());if(method==='PATCH')return oneOf(await table('project_settings').upsert({workspace_id:ws,project_name:b.project_name||'Друк',created_by:c.id,...b},{onConflict:'workspace_id'}).select().single())}
+  if(p==='/settings'){
+  if(method==='GET')return dataOf(await table('project_settings').select('*').eq('workspace_id',ws).maybeSingle())
+  if(method==='PATCH'){
+    const updated=await table('project_settings').update(b).eq('workspace_id',ws).select().maybeSingle()
+    if(updated.error)asError(updated)
+    if(updated.data)return updated.data
+    return oneOf(await table('project_settings').insert({workspace_id:ws,project_name:b.project_name||'Друк',created_by:c.id,...b}).select().single())
+  }
+}
   if(p==='/dashboard'&&method==='GET'){
     const [settings,focus,tasks,programs,decisions]=await Promise.all([table('project_settings').select('*').eq('workspace_id',ws).maybeSingle(),table('weekly_focus_items').select('*').eq('workspace_id',ws).order('week_start',{ascending:false}).order('created_at').limit(6),table('tasks').select('*').eq('workspace_id',ws).neq('status','done').order('blocked',{ascending:false}).order('due_date',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}).limit(12),table('programs').select('*').eq('workspace_id',ws).eq('archived',false).order('deadline',{ascending:true,nullsFirst:false}).limit(8),table('decisions').select('*').eq('workspace_id',ws).eq('archived',false).order('decision_date',{ascending:false}).order('created_at',{ascending:false}).limit(5)])
     return {settings:dataOf(settings),focus:dataOf(focus),tasks:dataOf(tasks),programs:dataOf(programs),decisions:dataOf(decisions),today:new Date().toISOString().slice(0,10)}
