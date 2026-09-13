@@ -201,6 +201,26 @@ async def team(user: CurrentUser = Depends(current_user)):
     )
 
 
+@router.get("/program-materials")
+async def program_materials(user: CurrentUser = Depends(current_user)):
+    db = db_for(user)
+    answers = await db.select(
+        "program_answers",
+        filters={"workspace_id": user.workspace_id},
+        select="id,program_id,question,answer,updated_at,source_answer_id",
+        order="updated_at.desc",
+    )
+    programs = await db.select(
+        "programs",
+        filters={"workspace_id": user.workspace_id},
+        select="id,name",
+    )
+    names = {row["id"]: row["name"] for row in programs}
+    for row in answers:
+        row["program_name"] = names.get(row.get("program_id"), "Программа")
+    return answers
+
+
 @router.get("/analytics")
 async def analytics(user: CurrentUser = Depends(current_user)):
     db = db_for(user)

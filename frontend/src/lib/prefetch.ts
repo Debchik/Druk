@@ -21,7 +21,7 @@ export function prefetchWorkspace(qc: QueryClient) {
     }),
     () => prefetch(qc, ['tasks-rich', false, false], async () => {
       const [tasks, members, issues] = await Promise.all([
-        api('/tasks?mine=false&include_done=false'), api('/team'), api('/github/issues'),
+        api('/tasks?mine=false&include_done=false'), api('/team'), api('/github/issues').catch(() => []),
       ])
       return { tasks, members, issues }
     }),
@@ -43,7 +43,7 @@ export function prefetchWorkspace(qc: QueryClient) {
     }),
     () => prefetch(qc, ['settings-rich'], async () => {
       const [settings, members, links, repos, invites] = await Promise.all([
-        api('/settings'), api('/team'), api('/links'), api('/github/repositories'), api('/invites'),
+        api('/settings'), api('/team'), api('/links'), api('/github/repositories').catch(() => []), api('/invites'),
       ])
       return { settings, members, links, repos, invites }
     }),

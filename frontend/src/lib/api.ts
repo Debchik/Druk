@@ -111,6 +111,24 @@ async function directApi(path:string,init:RequestInit):Promise<any|typeof MISS>{
   m=p.match(/^\/members\/([^/]+)$/);if(m&&method==='PATCH')return oneOf(await table('workspace_members').update(b).eq('workspace_id',ws).eq('user_id',m[1]).select().single())
   if(p==='/comments'){const entityType=url.searchParams.get('entity_type')||b.entity_type,entityId=url.searchParams.get('entity_id')||b.entity_id;if(method==='GET'){const [rowsResult,membersResult]=await Promise.all([table('entity_comments').select('*').eq('workspace_id',ws).eq('entity_type',entityType).eq('entity_id',entityId).order('created_at'),table('workspace_members').select('user_id,display_name').eq('workspace_id',ws)]),names=new Map(dataOf<any[]>(membersResult).map(x=>[x.user_id,x.display_name]));return dataOf<any[]>(rowsResult).map(x=>({...x,author_name:names.get(x.created_by)||'Участник',can_edit:x.created_by===c.id}))}if(method==='POST')return {...oneOf<any>(await table('entity_comments').insert({workspace_id:ws,entity_type:b.entity_type,entity_id:b.entity_id,body:String(b.body||'').trim(),created_by:c.id}).select().single()),author_name:c.display_name,can_edit:true}}
   m=p.match(/^\/comments\/([^/]+)$/);if(m){if(method==='PATCH')return oneOf(await table('entity_comments').update({body:String(b.body||'').trim()}).eq('id',m[1]).eq('workspace_id',ws).eq('created_by',c.id).select().single());if(method==='DELETE'){dataOf(await table('entity_comments').delete().eq('id',m[1]).eq('workspace_id',ws).eq('created_by',c.id));return undefined}}
+  if(p==='/github/repositories'){
+    if(method==='GET')return dataOf(await table('github_repositories').select('*').eq('workspace_id',ws).order('created_at',{ascending:false}))
+    if(method==='POST'){
+      const fullName=String(b.full_name||'').trim()
+      if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(fullName))throw new ApiError(422,'INVALID_REPOSITORY','Укажите репозиторий в формате owner/name')
+      return oneOf(await table('github_repositories').insert({workspace_id:ws,full_name:fullName,created_by:c.id}).select().single())
+    }
+  }
+  if(p==='/github/issues'&&method==='GET')return dataOf(await table('github_issues').select('*').eq('workspace_id',ws).order('github_updated_at',{ascending:false}).limit(500))
+  if(p==='/program-materials'&&method==='GET'){
+    const [answersResult,programsResult]=await Promise.all([
+      table('program_answers').select('id,program_id,question,answer,updated_at,source_answer_id').eq('workspace_id',ws).order('updated_at',{ascending:false}),
+      table('programs').select('id,name').eq('workspace_id',ws),
+    ])
+    const names=new Map(dataOf<any[]>(programsResult).map(x=>[x.id,x.name]))
+    return dataOf<any[]>(answersResult).map(x=>({...x,program_name:names.get(x.program_id)||'Программа'}))
+  }
+
   if(p==='/files'){
     if(method==='GET'){let q:any=table('files').select('*').eq('workspace_id',ws);const scope=url.searchParams.get('scope'),program=url.searchParams.get('program_id'),term=url.searchParams.get('q');if(scope)q=q.eq('scope',scope);if(program)q=q.eq('program_id',program);if(term)q=q.ilike('display_name',`%${term}%`);return dataOf(await q.order('created_at',{ascending:false}))}
     if(method==='POST'&&b instanceof FormData){const file=b.get('file');if(!(file instanceof File))throw new ApiError(422,'FILE_REQUIRED','Выберите файл');const scope=String(b.get('scope')||'project'),programId=b.get('program_id')?String(b.get('program_id')):null;if(scope==='program'&&!programId)throw new ApiError(422,'PROGRAM_REQUIRED','Для файла программы нужна программа');const {mime}=await validateFile(file),id=crypto.randomUUID(),storagePath=`${ws}/${programId?`programs/${programId}`:'project'}/${id}`,up=await supabase.storage.from(BUCKET).upload(storagePath,file,{contentType:mime,upsert:false});if(up.error)asError(up);try{const created=oneOf<any>(await table('files').insert({id,workspace_id:ws,scope,program_id:programId,storage_path:storagePath,original_name:file.name,display_name:file.name,mime_type:mime,size_bytes:file.size,created_by:c.id}).select().single());if(programId)dataOf(await table('program_file_links').insert({workspace_id:ws,program_id:programId,file_id:id,created_by:c.id}));return created}catch(e){await supabase.storage.from(BUCKET).remove([storagePath]);throw e}}
