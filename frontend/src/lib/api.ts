@@ -10,24 +10,114 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(path: string, init: RequestInit = {}, schema?: z.ZodType<T>): Promise<T> {
-  const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token
-  if (!token) throw new ApiError(401, 'UNAUTHENTICATED', 'Требуется вход')
-  const headers = new Headers(init.headers)
-  headers.set('Authorization', `Bearer ${token}`)
-  if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type','application/json')
-  const res = await fetch(`${env.VITE_API_URL}${path}`, {...init, headers})
-  if (res.status === 204) return undefined as T
-  const payload: unknown = await res.json().catch(() => null)
-  if (!res.ok) {
-    const e = payload as {error?:{code?:string;message?:string;details?:unknown}} | null
-    throw new ApiError(res.status, e?.error?.code || 'API_ERROR', e?.error?.message || 'Ошибка запроса', e?.error?.details)
-  }
-  if (!schema) return payload as T
-  const parsed = schema.safeParse(payload)
-  if (!parsed.success) throw new ApiError(502,'INVALID_API_RESPONSE','Сервер вернул данные неожиданного формата',parsed.error.flatten())
-  return parsed.data
+type Context={id:string;email:string|null;workspace_id:string;display_name:string;role?:string}
+const MISS=Symbol('DIRECT_API_MISS')
+const BUCKET='workspace-files'
+const MAX_FILE=20*1024*1024
+let contextPromise:Promise<Context>|null=null
+
+function bodyOf(init:RequestInit){
+  if(!init.body)return {} as any
+  if(init.body instanceof FormData)return init.body
+  if(typeof init.body==='string')return JSON.parse(init.body||'{}')
+  return init.body as any
+}
+function asError(result:any,fallback='Ошибка запроса'):never{const e=result?.error||result;throw new ApiError(result?.status||400,e?.code||'SUPABASE_ERROR',e?.message||fallback,e?.details||{})}
+function dataOf<T=any>(result:any):T{if(result?.error)asError(result);return result?.data as T}
+function oneOf<T=any>(result:any):T{const data=dataOf<T|null>(result);if(!data)throw new ApiError(404,'NOT_FOUND','Объект не найден');return data}
+export function resetApiContext(){contextPromise=null}
+
+async function context():Promise<Context>{
+  if(contextPromise)return contextPromise
+  contextPromise=(async()=>{
+    const {data:{session}}=await supabase.auth.getSession()
+    if(!session)throw new ApiError(401,'UNAUTHENTICATED','Требуется вход')
+    const key=`druk-workspace-context:v2:${session.user.id}`
+    try{const cached=JSON.parse(localStorage.getItem(key)||'null');if(cached?.at>Date.now()-30*60_000&&cached?.value?.workspace_id)return {...cached.value,email:session.user.email||null}}catch{/* invalid local cache */}
+    const rows=dataOf<any[]>(await supabase.from('workspace_members').select('workspace_id,user_id,display_name,role').eq('user_id',session.user.id).limit(2))
+    if(!rows.length)throw new ApiError(403,'NOT_A_MEMBER','У этого аккаунта нет доступа к рабочему пространству')
+    if(rows.length>1)throw new ApiError(409,'MULTIPLE_WORKSPACES','Пользователь состоит более чем в одном workspace')
+    const value:Context={id:session.user.id,email:session.user.email||null,workspace_id:rows[0].workspace_id,display_name:rows[0].display_name||'Участник',role:rows[0].role}
+    try{localStorage.setItem(key,JSON.stringify({at:Date.now(),value}))}catch{/* storage may be unavailable */}
+    return value
+  })().catch(e=>{contextPromise=null;throw e})
+  return contextPromise
 }
 
-export const json = (method: string, body?: unknown): RequestInit => ({method, body: body === undefined ? undefined : JSON.stringify(body)})
+async function serverApi<T>(path:string,init:RequestInit):Promise<T>{
+  const {data}=await supabase.auth.getSession();const token=data.session?.access_token
+  if(!token)throw new ApiError(401,'UNAUTHENTICATED','Требуется вход')
+  const headers=new Headers(init.headers);headers.set('Authorization',`Bearer ${token}`);if(init.body&&!(init.body instanceof FormData))headers.set('Content-Type','application/json')
+  const base=(env.VITE_API_URL||'/api/v1').replace(/\/$/,'');const res=await fetch(`${base}${path}`,{...init,headers})
+  if(res.status===204)return undefined as T
+  const payload:any=await res.json().catch(()=>null);if(!res.ok)throw new ApiError(res.status,payload?.error?.code||'API_ERROR',payload?.error?.message||'Ошибка запроса',payload?.error?.details);return payload as T
+}
+
+const MIME:Record<string,string>={pdf:'application/pdf',ppt:'application/vnd.ms-powerpoint',pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation',doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',xls:'application/vnd.ms-excel',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',txt:'text/plain',csv:'text/csv',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp'}
+async function validateFile(file:File){
+  const ext=(file.name.split('.').pop()||'').toLowerCase(),mime=MIME[ext];if(!mime)throw new ApiError(422,'FILE_TYPE_NOT_ALLOWED','Этот тип файла не поддерживается');if(!file.size)throw new ApiError(422,'EMPTY_FILE','Пустой файл нельзя загрузить');if(file.size>MAX_FILE)throw new ApiError(413,'FILE_TOO_LARGE','Файл превышает допустимый размер 20 МБ')
+  const b=new Uint8Array(await file.slice(0,4096).arrayBuffer()),starts=(xs:number[])=>xs.every((x,i)=>b[i]===x);let ok=true
+  if(ext==='pdf')ok=starts([0x25,0x50,0x44,0x46,0x2d]);else if(ext==='png')ok=starts([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]);else if(ext==='jpg'||ext==='jpeg')ok=starts([0xff,0xd8,0xff]);else if(ext==='webp')ok=String.fromCharCode(...b.slice(0,4))==='RIFF'&&String.fromCharCode(...b.slice(8,12))==='WEBP';else if(['docx','xlsx','pptx'].includes(ext))ok=starts([0x50,0x4b,0x03,0x04]);else if(['doc','xls','ppt'].includes(ext))ok=starts([0xd0,0xcf,0x11,0xe0,0xa1,0xb1,0x1a,0xe1]);else if(['txt','csv'].includes(ext))ok=!b.includes(0)
+  if(!ok)throw new ApiError(422,'FILE_SIGNATURE_MISMATCH','Содержимое файла не соответствует его расширению');return {mime}
+}
+
+async function directApi(path:string,init:RequestInit):Promise<any|typeof MISS>{
+  const method=(init.method||'GET').toUpperCase(),url=new URL(path,'https://druk.local'),p=url.pathname,b=bodyOf(init),c=await context(),ws=c.workspace_id,table=(name:string)=>supabase.from(name)
+  if(p==='/me'&&method==='GET')return c
+  if((p==='/team'||p==='/members')&&method==='GET')return dataOf(await table('workspace_members').select(p==='/team'?'user_id,display_name,role':'user_id,display_name').eq('workspace_id',ws).order('display_name'))
+  if(p==='/settings'){if(method==='GET')return dataOf(await table('project_settings').select('*').eq('workspace_id',ws).maybeSingle());if(method==='PATCH')return oneOf(await table('project_settings').upsert({workspace_id:ws,project_name:b.project_name||'Друк',created_by:c.id,...b},{onConflict:'workspace_id'}).select().single())}
+  if(p==='/dashboard'&&method==='GET'){
+    const [settings,focus,tasks,programs,decisions]=await Promise.all([table('project_settings').select('*').eq('workspace_id',ws).maybeSingle(),table('weekly_focus_items').select('*').eq('workspace_id',ws).order('week_start',{ascending:false}).order('created_at').limit(6),table('tasks').select('*').eq('workspace_id',ws).neq('status','done').order('blocked',{ascending:false}).order('due_date',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}).limit(12),table('programs').select('*').eq('workspace_id',ws).eq('archived',false).order('deadline',{ascending:true,nullsFirst:false}).limit(8),table('decisions').select('*').eq('workspace_id',ws).eq('archived',false).order('decision_date',{ascending:false}).order('created_at',{ascending:false}).limit(5)])
+    return {settings:dataOf(settings),focus:dataOf(focus),tasks:dataOf(tasks),programs:dataOf(programs),decisions:dataOf(decisions),today:new Date().toISOString().slice(0,10)}
+  }
+  if(p==='/focus'&&method==='GET'){let q:any=table('weekly_focus_items').select('*').eq('workspace_id',ws);if(url.searchParams.get('week_start'))q=q.eq('week_start',url.searchParams.get('week_start'));return dataOf(await q.order('week_start',{ascending:false}).order('created_at'))}
+  if(p==='/focus'&&method==='POST'){const count=dataOf<any[]>(await table('weekly_focus_items').select('id').eq('workspace_id',ws).eq('week_start',b.week_start));if(count.length>=3)throw new ApiError(422,'FOCUS_LIMIT','На неделю можно задать не больше трёх результатов');return oneOf(await table('weekly_focus_items').insert({workspace_id:ws,created_by:c.id,...b}).select().single())}
+  let m=p.match(/^\/focus\/([^/]+)$/);if(m){if(method==='PATCH')return oneOf(await table('weekly_focus_items').update(b).eq('id',m[1]).eq('workspace_id',ws).select().single());if(method==='DELETE'){dataOf(await table('weekly_focus_items').delete().eq('id',m[1]).eq('workspace_id',ws));return undefined}}
+  if(p==='/tasks'){
+    if(method==='GET'){let q:any=table('tasks').select('*').eq('workspace_id',ws);const mine=url.searchParams.get('mine')==='true',include=url.searchParams.get('include_done')==='true',status=url.searchParams.get('status'),assignee=url.searchParams.get('assignee_id'),week=url.searchParams.get('week_start');if(mine)q=q.eq('assignee_id',c.id);else if(assignee)q=q.eq('assignee_id',assignee);if(status)q=q.eq('status',status);else if(!include)q=q.neq('status','done');if(week)q=q.eq('planned_week',week);return dataOf(await q.order('blocked',{ascending:false}).order('due_date',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}))}
+    if(method==='POST')return oneOf(await table('tasks').insert({workspace_id:ws,created_by:c.id,...b}).select().single())
+  }
+  m=p.match(/^\/tasks\/([^/]+)$/);if(m){if(method==='PATCH')return oneOf(await table('tasks').update(b).eq('id',m[1]).eq('workspace_id',ws).select().single());if(method==='DELETE'){dataOf(await table('tasks').delete().eq('id',m[1]).eq('workspace_id',ws));return undefined}}
+  if(p==='/programs'){
+    if(method==='GET'){let q:any=table('programs').select('*').eq('workspace_id',ws);const status=url.searchParams.get('status'),include=url.searchParams.get('include_archived')==='true',term=url.searchParams.get('q');if(status)q=q.eq('status',status);if(!include)q=q.eq('archived',false);if(term)q=q.ilike('name',`%${term}%`);return dataOf(await q.order('deadline',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}))}
+    if(method==='POST')return oneOf(await table('programs').insert({workspace_id:ws,created_by:c.id,...b}).select().single())
+  }
+  m=p.match(/^\/programs\/([^/]+)$/);if(m){const id=m[1];if(method==='GET'){const [program,checklist,answers,files,submissions]=await Promise.all([table('programs').select('*').eq('id',id).eq('workspace_id',ws).maybeSingle(),table('program_checklist_items').select('*').eq('workspace_id',ws).eq('program_id',id).order('created_at'),table('program_answers').select('*').eq('workspace_id',ws).eq('program_id',id).order('created_at'),table('program_file_links').select('id,file_id,files(id,display_name,original_name,mime_type,size_bytes,scope,program_id,created_at,created_by)').eq('workspace_id',ws).eq('program_id',id).order('created_at',{ascending:false}),table('program_submissions').select('*').eq('workspace_id',ws).eq('program_id',id).order('created_at',{ascending:false})]);return {program:oneOf(program),checklist:dataOf(checklist),answers:dataOf(answers),files:dataOf(files),submissions:dataOf(submissions)}}if(method==='PATCH')return oneOf(await table('programs').update(b).eq('id',id).eq('workspace_id',ws).select().single());if(method==='DELETE'){dataOf(await table('programs').delete().eq('id',id).eq('workspace_id',ws));return undefined}}
+  m=p.match(/^\/programs\/([^/]+)\/checklist$/);if(m&&method==='POST')return oneOf(await table('program_checklist_items').insert({workspace_id:ws,program_id:m[1],text:b.text,created_by:c.id}).select().single())
+  m=p.match(/^\/checklist\/([^/]+)$/);if(m&&method==='PATCH')return oneOf(await table('program_checklist_items').update(Object.fromEntries(Object.entries(b).filter(([k])=>k==='text'||k==='done'))).eq('id',m[1]).eq('workspace_id',ws).select().single())
+  if(p==='/answers'){if(method==='GET'){const term=url.searchParams.get('q');if(term)return dataOf(await supabase.rpc('search_answers',{p_workspace_id:ws,p_query:term}));return dataOf(await table('answer_library').select('*').eq('workspace_id',ws).order('updated_at',{ascending:false}))}if(method==='POST')return oneOf(await table('answer_library').insert({workspace_id:ws,created_by:c.id,...b}).select().single())}
+  m=p.match(/^\/answers\/([^/]+)$/);if(m){if(method==='PATCH')return oneOf(await table('answer_library').update(b).eq('id',m[1]).eq('workspace_id',ws).select().single());if(method==='DELETE'){dataOf(await table('answer_library').delete().eq('id',m[1]).eq('workspace_id',ws));return undefined}}
+  m=p.match(/^\/programs\/([^/]+)\/answers\/from-library$/);if(m&&method==='POST'){const src=oneOf<any>(await table('answer_library').select('*').eq('id',b.answer_id).eq('workspace_id',ws).maybeSingle());return oneOf(await table('program_answers').insert({workspace_id:ws,program_id:m[1],question:src.question,answer:src.answer,source_answer_id:src.id,created_by:c.id}).select().single())}
+  m=p.match(/^\/programs\/([^/]+)\/answers$/);if(m&&method==='POST')return oneOf(await table('program_answers').insert({workspace_id:ws,program_id:m[1],created_by:c.id,...b}).select().single())
+  m=p.match(/^\/program-answers\/([^/]+)$/);if(m&&method==='PATCH')return oneOf(await table('program_answers').update(b).eq('id',m[1]).eq('workspace_id',ws).select().single())
+  m=p.match(/^\/programs\/([^/]+)\/submissions$/);if(m&&method==='POST'){const id=m[1],[program,answers,files]=await Promise.all([table('programs').select('*').eq('id',id).eq('workspace_id',ws).maybeSingle(),table('program_answers').select('*').eq('workspace_id',ws).eq('program_id',id).order('created_at'),table('program_file_links').select('file_id,files(id,display_name,original_name,storage_path,mime_type,size_bytes)').eq('workspace_id',ws).eq('program_id',id)]);return oneOf(await table('program_submissions').insert({workspace_id:ws,program_id:id,snapshot:{program:oneOf(program),answers:dataOf(answers),files:dataOf(files)},created_by:c.id}).select().single())}
+  if(p==='/events'){if(method==='GET')return dataOf(await table('meetings').select('*').eq('workspace_id',ws).order('meeting_date',{ascending:false}).order('start_time',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}));if(method==='POST')return oneOf(await table('meetings').insert({workspace_id:ws,created_by:c.id,...b}).select().single())}
+  m=p.match(/^\/events\/([^/]+)$/);if(m){if(method==='PATCH')return oneOf(await table('meetings').update(b).eq('id',m[1]).eq('workspace_id',ws).select().single());if(method==='DELETE'){dataOf(await table('meetings').delete().eq('id',m[1]).eq('workspace_id',ws));return undefined}}
+  if(p==='/links'){if(method==='GET')return dataOf(await table('project_links').select('*').eq('workspace_id',ws).order('position').order('created_at'));if(method==='POST')return oneOf(await table('project_links').upsert({workspace_id:ws,created_by:c.id,...b},{onConflict:'workspace_id,kind'}).select().single())}
+  m=p.match(/^\/links\/([^/]+)$/);if(m){if(method==='PATCH')return oneOf(await table('project_links').update(b).eq('id',m[1]).eq('workspace_id',ws).select().single());if(method==='DELETE'){dataOf(await table('project_links').delete().eq('id',m[1]).eq('workspace_id',ws));return undefined}}
+  if(p==='/analytics'&&method==='GET'){const [metricsResult,feedbackResult]=await Promise.all([table('product_metrics_daily').select('*').eq('workspace_id',ws).order('metric_date',{ascending:false}).limit(31),table('client_feedback').select('*').eq('workspace_id',ws).order('created_at',{ascending:false}).limit(20)]),metrics=dataOf<any[]>(metricsResult),latest:any=metrics[0]?{...metrics[0]}:{users_total:0,messages_total:0,dialogs_total:0,weekly_active:0,avg_session_seconds:0,retention_7d:0,registration_conversion:0},changes:Record<string,number>={};if(metrics.length>1){const prev=metrics[Math.min(metrics.length-1,7)];for(const k of ['users_total','messages_total','dialogs_total','weekly_active','avg_session_seconds','retention_7d','registration_conversion']){const a=Number(latest[k]||0),v=Number(prev[k]||0);changes[k]=v?Math.round(((a-v)/v)*1000)/10:a?100:0}}latest.changes=changes;return {metric:latest,history:[...metrics].reverse(),feedback:dataOf(feedbackResult)}}
+  if(p==='/analytics/metrics'&&method==='POST')return oneOf(await table('product_metrics_daily').upsert({workspace_id:ws,created_by:c.id,...b},{onConflict:'workspace_id,metric_date'}).select().single())
+  if(p==='/feedback'&&method==='POST')return oneOf(await table('client_feedback').insert({workspace_id:ws,created_by:c.id,...b}).select().single())
+  if(p==='/invites'){if(method==='GET')return dataOf(await table('workspace_invites').select('*').eq('workspace_id',ws).eq('status','pending').order('created_at',{ascending:false}));if(method==='POST')return dataOf(await supabase.rpc('add_workspace_member_by_email',{p_workspace_id:ws,p_email:String(b.email||'').trim().toLowerCase(),p_display_name:String(b.display_name||'Участник').trim(),p_role:b.role||'member'}))}
+  m=p.match(/^\/invites\/([^/]+)$/);if(m&&method==='DELETE'){dataOf(await table('workspace_invites').delete().eq('id',m[1]).eq('workspace_id',ws));return undefined}
+  m=p.match(/^\/members\/([^/]+)$/);if(m&&method==='PATCH')return oneOf(await table('workspace_members').update(b).eq('workspace_id',ws).eq('user_id',m[1]).select().single())
+  if(p==='/comments'){const entityType=url.searchParams.get('entity_type')||b.entity_type,entityId=url.searchParams.get('entity_id')||b.entity_id;if(method==='GET'){const [rowsResult,membersResult]=await Promise.all([table('entity_comments').select('*').eq('workspace_id',ws).eq('entity_type',entityType).eq('entity_id',entityId).order('created_at'),table('workspace_members').select('user_id,display_name').eq('workspace_id',ws)]),names=new Map(dataOf<any[]>(membersResult).map(x=>[x.user_id,x.display_name]));return dataOf<any[]>(rowsResult).map(x=>({...x,author_name:names.get(x.created_by)||'Участник',can_edit:x.created_by===c.id}))}if(method==='POST')return {...oneOf<any>(await table('entity_comments').insert({workspace_id:ws,entity_type:b.entity_type,entity_id:b.entity_id,body:String(b.body||'').trim(),created_by:c.id}).select().single()),author_name:c.display_name,can_edit:true}}
+  m=p.match(/^\/comments\/([^/]+)$/);if(m){if(method==='PATCH')return oneOf(await table('entity_comments').update({body:String(b.body||'').trim()}).eq('id',m[1]).eq('workspace_id',ws).eq('created_by',c.id).select().single());if(method==='DELETE'){dataOf(await table('entity_comments').delete().eq('id',m[1]).eq('workspace_id',ws).eq('created_by',c.id));return undefined}}
+  if(p==='/files'){
+    if(method==='GET'){let q:any=table('files').select('*').eq('workspace_id',ws);const scope=url.searchParams.get('scope'),program=url.searchParams.get('program_id'),term=url.searchParams.get('q');if(scope)q=q.eq('scope',scope);if(program)q=q.eq('program_id',program);if(term)q=q.ilike('display_name',`%${term}%`);return dataOf(await q.order('created_at',{ascending:false}))}
+    if(method==='POST'&&b instanceof FormData){const file=b.get('file');if(!(file instanceof File))throw new ApiError(422,'FILE_REQUIRED','Выберите файл');const scope=String(b.get('scope')||'project'),programId=b.get('program_id')?String(b.get('program_id')):null;if(scope==='program'&&!programId)throw new ApiError(422,'PROGRAM_REQUIRED','Для файла программы нужна программа');const {mime}=await validateFile(file),id=crypto.randomUUID(),storagePath=`${ws}/${programId?`programs/${programId}`:'project'}/${id}`,up=await supabase.storage.from(BUCKET).upload(storagePath,file,{contentType:mime,upsert:false});if(up.error)asError(up);try{const created=oneOf<any>(await table('files').insert({id,workspace_id:ws,scope,program_id:programId,storage_path:storagePath,original_name:file.name,display_name:file.name,mime_type:mime,size_bytes:file.size,created_by:c.id}).select().single());if(programId)dataOf(await table('program_file_links').insert({workspace_id:ws,program_id:programId,file_id:id,created_by:c.id}));return created}catch(e){await supabase.storage.from(BUCKET).remove([storagePath]);throw e}}
+  }
+  m=p.match(/^\/files\/([^/]+)\/signed-url$/);if(m&&method==='POST'){const row=oneOf<any>(await table('files').select('storage_path').eq('id',m[1]).eq('workspace_id',ws).maybeSingle()),signed=await supabase.storage.from(BUCKET).createSignedUrl(row.storage_path,300);if(signed.error)asError(signed);return {url:signed.data.signedUrl,expires_in:300}}
+  m=p.match(/^\/files\/([^/]+)$/);if(m){if(method==='PATCH')return oneOf(await table('files').update({display_name:b.display_name}).eq('id',m[1]).eq('workspace_id',ws).select().single());if(method==='DELETE'){const id=m[1],row=oneOf<any>(await table('files').select('storage_path').eq('id',id).eq('workspace_id',ws).maybeSingle()),refs=dataOf<any[]>(await table('program_submissions').select('snapshot').eq('workspace_id',ws));if(refs.some(x=>JSON.stringify(x.snapshot||{}).includes(id)))throw new ApiError(409,'FILE_IN_SUBMISSION','Файл используется в зафиксированной заявке и не может быть удалён');const removed=await supabase.storage.from(BUCKET).remove([row.storage_path]);if(removed.error)asError(removed);dataOf(await table('files').delete().eq('id',id).eq('workspace_id',ws));return undefined}}
+  m=p.match(/^\/programs\/([^/]+)\/files\/link$/);if(m&&method==='POST')return oneOf(await table('program_file_links').upsert({workspace_id:ws,program_id:m[1],file_id:b.file_id,created_by:c.id},{onConflict:'program_id,file_id'}).select().single())
+  if(p==='/bug-reports'){
+    if(method==='GET')return dataOf(await table('bug_reports').select('*').eq('workspace_id',ws).order('created_at',{ascending:false}).limit(100))
+    if(method==='POST'&&b instanceof FormData){const description=String(b.get('description')||'').trim();if(description.length<3||description.length>5000)throw new ApiError(422,'INVALID_BUG_REPORT','Описание должно содержать от 3 до 5000 символов');const screenshot=b.get('screenshot');let screenshotPath:string|null=null;if(screenshot instanceof File&&screenshot.size){if(!['image/png','image/jpeg','image/webp'].includes(screenshot.type))throw new ApiError(422,'INVALID_SCREENSHOT','Поддерживаются PNG, JPG и WEBP');if(screenshot.size>10*1024*1024)throw new ApiError(413,'SCREENSHOT_TOO_LARGE','Скриншот должен быть не больше 10 МБ');const ext=screenshot.type==='image/png'?'png':screenshot.type==='image/webp'?'webp':'jpg';screenshotPath=`${ws}/bug-reports/${crypto.randomUUID()}.${ext}`;const up=await supabase.storage.from(BUCKET).upload(screenshotPath,screenshot,{contentType:screenshot.type});if(up.error)asError(up)}try{return oneOf(await table('bug_reports').insert({workspace_id:ws,description,page_url:String(b.get('page_url')||'').slice(0,2000)||null,user_agent:String(b.get('user_agent')||'').slice(0,1000)||null,screenshot_path:screenshotPath,created_by:c.id}).select().single())}catch(e){if(screenshotPath)await supabase.storage.from(BUCKET).remove([screenshotPath]);throw e}}
+  }
+  if(p==='/search'&&method==='GET'){const term=(url.searchParams.get('q')||'').trim();if(term.length<2)return {results:[]};const pattern=`%${term}%`,[tasks,programs,files,answers,decisions]=await Promise.all([table('tasks').select('id,title').eq('workspace_id',ws).ilike('title',pattern).limit(5),table('programs').select('id,name').eq('workspace_id',ws).ilike('name',pattern).limit(5),table('files').select('id,display_name').eq('workspace_id',ws).ilike('display_name',pattern).limit(5),table('answer_library').select('id,question').eq('workspace_id',ws).ilike('question',pattern).limit(5),table('decisions').select('id,title').eq('workspace_id',ws).ilike('title',pattern).limit(5)]),results:any[]=[];for(const x of dataOf<any[]>(tasks))results.push({type:'task',id:x.id,title:x.title,type_label:'Задача',href:'/tasks'});for(const x of dataOf<any[]>(programs))results.push({type:'program',id:x.id,title:x.name,type_label:'Программа',href:`/programs/${x.id}`});for(const x of dataOf<any[]>(files))results.push({type:'file',id:x.id,title:x.display_name,type_label:'Файл',href:'/files'});for(const x of dataOf<any[]>(answers))results.push({type:'answer',id:x.id,title:x.question,type_label:'Ответ',href:'/answers'});for(const x of dataOf<any[]>(decisions))results.push({type:'decision',id:x.id,title:x.title,type_label:'Решение',href:'/events'});return {results:results.slice(0,20)}}
+  if(p==='/export'&&method==='GET'){const names=['project_settings','workspace_members','weekly_focus_items','tasks','meetings','programs','program_checklist_items','answer_library','program_answers','files','program_file_links','program_submissions','decisions','project_links','product_metrics_daily','client_feedback','entity_comments','bug_reports'],pairs=await Promise.all(names.map(async name=>[name,dataOf(await table(name).select('*').eq('workspace_id',ws))]));return {exported_at:new Date().toISOString(),workspace_id:ws,...Object.fromEntries(pairs)}}
+  return MISS
+}
+
+export async function api<T>(path:string,init:RequestInit={},schema?:z.ZodType<T>):Promise<T>{const payload=await directApi(path,init),result=payload===MISS?await serverApi<T>(path,init):payload as T;if(!schema)return result;const parsed=schema.safeParse(result);if(!parsed.success)throw new ApiError(502,'INVALID_API_RESPONSE','Сервис вернул данные неожиданного формата',parsed.error.flatten());return parsed.data}
+export const json=(method:string,body?:unknown):RequestInit=>({method,body:body===undefined?undefined:JSON.stringify(body)})
