@@ -1,0 +1,1 @@
+HQ JPEG artwork source chunks are materialized into public/art-hq during Vite prebuild.
