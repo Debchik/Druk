@@ -1,14 +1,9 @@
-import home from './generated-art/home.webp.b64?raw'
-import side from './generated-art/side.webp.b64?raw'
-import wide from './generated-art/wide.webp.b64?raw'
-import rail from './generated-art/rail.webp.b64?raw'
-
-const dataUrl=(value:string)=>`url("data:image/webp;base64,${value.trim()}")`
+const artUrl=(name:string)=>`url("${import.meta.env.BASE_URL}art/${name}.webp?v=20260913-1")`
 
 export function applyGeneratedArtwork(){
   const root=document.documentElement
-  root.style.setProperty('--druk-art-home',dataUrl(home))
-  root.style.setProperty('--druk-art-side',dataUrl(side))
-  root.style.setProperty('--druk-art-wide',dataUrl(wide))
-  root.style.setProperty('--druk-art-rail',dataUrl(rail))
+  root.style.setProperty('--druk-art-home',artUrl('home'))
+  root.style.setProperty('--druk-art-side',artUrl('side'))
+  root.style.setProperty('--druk-art-wide',artUrl('wide'))
+  root.style.setProperty('--druk-art-rail',artUrl('rail'))
 }
