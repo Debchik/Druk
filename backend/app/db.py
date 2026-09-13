@@ -3,6 +3,27 @@ import httpx
 from .config import get_settings
 from .errors import AppError
 
+_http_client: httpx.AsyncClient | None = None
+
+
+def get_http_client() -> httpx.AsyncClient:
+    """One connection pool per API process instead of one TCP/TLS session per query."""
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(20.0, connect=8.0),
+            limits=httpx.Limits(max_connections=50, max_keepalive_connections=20, keepalive_expiry=30.0),
+            http2=True,
+        )
+    return _http_client
+
+
+async def close_http_client() -> None:
+    global _http_client
+    if _http_client is not None and not _http_client.is_closed:
+        await _http_client.aclose()
+    _http_client = None
+
 
 class SupabaseClient:
     def __init__(self, token: str):
@@ -16,18 +37,17 @@ class SupabaseClient:
 
     async def request(self, method: str, path: str, *, params=None, json=None, content=None, headers=None):
         all_headers = {**self.headers, **(headers or {})}
-        async with httpx.AsyncClient(timeout=20) as client:
-            try:
-                r = await client.request(
-                    method,
-                    f"{self.settings.supabase_url.rstrip('/')}{path}",
-                    params=params,
-                    json=json,
-                    content=content,
-                    headers=all_headers,
-                )
-            except httpx.HTTPError as e:
-                raise AppError(502, "UPSTREAM_UNAVAILABLE", "Сервис данных временно недоступен") from e
+        try:
+            r = await get_http_client().request(
+                method,
+                f"{self.settings.supabase_url.rstrip('/')}{path}",
+                params=params,
+                json=json,
+                content=content,
+                headers=all_headers,
+            )
+        except httpx.HTTPError as e:
+            raise AppError(502, "UPSTREAM_UNAVAILABLE", "Сервис данных временно недоступен") from e
         if r.status_code >= 400:
             message = "Ошибка доступа к данным"
             try:
