@@ -49,10 +49,9 @@ export function prefetchWorkspace(qc: QueryClient) {
     }),
   ]
 
-  // Warm the current shell first, then fill the rest of the app without blocking first paint.
+  // Warm the current shell first, then fill the rest without blocking first paint.
   void Promise.all(jobs.slice(0, 3).map(job => job())).finally(() => {
     const run = () => jobs.slice(3).reduce((p, job) => p.then(() => job()), Promise.resolve())
-    if ('requestIdleCallback' in window) (window as any).requestIdleCallback(run, { timeout: 1500 })
-    else window.setTimeout(run, 250)
+    globalThis.setTimeout(run, 250)
   })
 }
