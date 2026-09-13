@@ -7,6 +7,7 @@ import { supabase } from './lib/supabase'
 import { prefetchWorkspace } from './lib/prefetch'
 import './styles.css'
 import './artwork.css'
+import './stability.css'
 
 const CACHE_MAX_AGE=24*60*60_000
 const CACHE_PREFIX='druk-query-cache:v3:'
