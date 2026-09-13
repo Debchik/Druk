@@ -68,3 +68,15 @@
 .program-answers .markdown-body{margin:7px 0 8px}
 .program-material-card>.markdown-body{display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical;overflow:hidden}
 @media(max-width:900px){.markdown-editor-split{grid-template-columns:1fr}.task-list-card .task-table{max-height:70vh}}
+
+/* markdown-program-editor-v2 */
+.program-answer-form .markdown-editor-split{grid-column:1/-1;width:100%}
+.program-answer-form .markdown-editor-split textarea{min-height:190px;resize:vertical}
+.program-answer-form .markdown-preview{min-height:190px;max-height:360px}
+.program-answers .program-markdown-editor{margin:8px 0 10px}
+.program-answers .program-markdown-editor textarea{min-height:210px;resize:vertical}
+.program-answers .program-markdown-editor .markdown-preview{min-height:210px;max-height:420px}
+.task-list-card .task-table::-webkit-scrollbar,.board-col::-webkit-scrollbar{width:9px;height:9px}
+.task-list-card .task-table::-webkit-scrollbar-thumb,.board-col::-webkit-scrollbar-thumb{background:#cdd8c9;border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+[data-theme="dark"] .task-list-card .task-row.table-head{background:var(--panel-bg,#1f2420)}
+@media(max-width:900px){.program-answer-form .markdown-preview,.program-answers .program-markdown-editor .markdown-preview{max-height:300px}}
