@@ -1,0 +1,63 @@
+/* Generated Druk art: final visual layer. Inline legacy backgrounds are intentionally overridden. */
+.home-hero .hero-visual{
+  background-image:var(--druk-art-home)!important;
+  background-size:cover!important;
+  background-position:72% center!important;
+  background-repeat:no-repeat!important;
+  min-height:235px;
+}
+.home-hero .hero-visual>img{display:none!important}
+
+.sidebar-art{
+  background-image:linear-gradient(180deg,rgba(255,255,255,.01),rgba(255,255,255,.08)),var(--druk-art-rail)!important;
+  background-size:cover!important;
+  background-position:center 44%!important;
+  background-repeat:no-repeat!important;
+}
+
+.programs-banner .banner-side,
+.answers-banner .banner-side,
+.settings-banner>div:last-child,
+.presentation-art{
+  background-image:var(--druk-art-side)!important;
+  background-size:cover!important;
+  background-position:72% center!important;
+  background-repeat:no-repeat!important;
+}
+
+.events-banner .banner-side{
+  background-image:var(--druk-art-wide)!important;
+  background-size:cover!important;
+  background-position:70% center!important;
+  background-repeat:no-repeat!important;
+}
+
+.nature-note{
+  background-image:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,248,234,.24)),var(--druk-art-wide)!important;
+  background-size:cover!important;
+  background-position:72% center!important;
+  background-repeat:no-repeat!important;
+  min-height:132px;
+  overflow:hidden;
+}
+
+.page-banner .banner-side,
+.settings-banner>div:last-child{
+  min-height:185px;
+}
+.presentation-art{min-height:150px}
+
+@media(min-width:1500px){
+  .home-hero .hero-visual{background-position:75% center!important}
+  .programs-banner .banner-side,.answers-banner .banner-side,.settings-banner>div:last-child,.presentation-art{background-position:75% center!important}
+}
+@media(max-width:960px){
+  .sidebar-art{display:none}
+  .home-hero .hero-visual{min-height:190px;background-position:72% center!important}
+  .page-banner .banner-side,.settings-banner>div:last-child{min-height:150px}
+}
+@media(max-width:680px){
+  .home-hero .hero-visual{min-height:165px}
+  .page-banner .banner-side,.settings-banner>div:last-child{min-height:132px}
+  .nature-note{min-height:112px}
+}
