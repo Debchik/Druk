@@ -114,7 +114,7 @@ async def dashboard(user: CurrentUser = Depends(current_user)):
     settings_rows, focus, tasks, programs, decisions = await asyncio.gather(
         db.select("project_settings", filters={"workspace_id": user.workspace_id}, limit=1),
         db.select("weekly_focus_items", filters={"workspace_id": user.workspace_id}, order="week_start.desc,created_at.asc", limit=6),
-        db.select("tasks", filters={"workspace_id": user.workspace_id, "status": "neq.done"}, order="blocked.desc,due_date.asc.nullslast,created_at.desc", limit=12),
+        db.select("tasks", filters={"workspace_id": user.workspace_id, "archived": "eq.false", "status": "neq.done"}, order="blocked.desc,due_date.asc.nullslast,created_at.desc", limit=12),
         db.select("programs", filters={"workspace_id": user.workspace_id, "archived": "eq.false"}, order="deadline.asc.nullslast", limit=8),
         db.select("decisions", filters={"workspace_id": user.workspace_id, "archived": "eq.false"}, order="decision_date.desc,created_at.desc", limit=5),
     )
@@ -154,8 +154,8 @@ async def delete_focus(item_id: str, user: CurrentUser = Depends(current_user)):
 
 
 @app.get("/api/v1/tasks")
-async def list_tasks(mine: bool = False, assignee_id: str | None = None, status: str | None = None, week_start: date | None = None, include_done: bool = False, user: CurrentUser = Depends(current_user)):
-    filters: dict = {"workspace_id": user.workspace_id}
+async def list_tasks(mine: bool = False, assignee_id: str | None = None, status: str | None = None, week_start: date | None = None, include_done: bool = False, archived: bool = False, user: CurrentUser = Depends(current_user)):
+    filters: dict = {"workspace_id": user.workspace_id, "archived": "eq.true" if archived else "eq.false"}
     if mine:
         filters["assignee_id"] = user.id
     elif assignee_id:

@@ -19,9 +19,9 @@ export function prefetchWorkspace(qc: QueryClient) {
       ])
       return { base, analytics, links, members, programs }
     }),
-    () => prefetch(qc, ['tasks-rich', false, false], async () => {
+    () => prefetch(qc, ['tasks-rich', false, true, false], async () => {
       const [tasks, members, issues] = await Promise.all([
-        api('/tasks?mine=false&include_done=false'), api('/team'), api('/github/issues').catch(() => []),
+        api('/tasks?mine=false&include_done=true&archived=false'), api('/team'), api('/github/issues').catch(() => []),
       ])
       return { tasks, members, issues }
     }),

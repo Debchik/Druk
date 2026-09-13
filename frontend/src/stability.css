@@ -55,3 +55,16 @@
  .program-materials-grid{grid-template-columns:1fr}
  .person-numbers span{padding:0 5px}
 }
+
+/* tasks-archive-markdown-v1 */
+.task-list-card .task-table{max-height:620px;overflow:auto;scrollbar-gutter:stable;border-radius:8px}
+.task-list-card .task-row.table-head{position:sticky;top:0;z-index:4;background:var(--panel-bg,#fff)}
+.board-col{max-height:680px;overflow-y:auto;scrollbar-gutter:stable}
+.board-col>h3{position:sticky;top:0;z-index:3;background:inherit;padding-bottom:7px}
+.toolbar button:disabled{opacity:.45;cursor:not-allowed}
+.markdown-editor-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:start}
+.markdown-preview{min-height:250px;max-height:430px;overflow:auto;border:1px solid #dde4da;border-radius:9px;padding:10px;background:var(--panel-bg,#fff)}
+.markdown-preview>small{display:block;color:#89918b;margin-bottom:8px;font-size:9px;text-transform:uppercase;letter-spacing:.04em}
+.program-answers .markdown-body{margin:7px 0 8px}
+.program-material-card>.markdown-body{display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical;overflow:hidden}
+@media(max-width:900px){.markdown-editor-split{grid-template-columns:1fr}.task-list-card .task-table{max-height:70vh}}

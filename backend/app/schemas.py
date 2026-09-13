@@ -15,6 +15,7 @@ class TaskCreate(BaseModel):
     planned_week: date | None = None
     blocked: bool = False
     block_reason: str | None = Field(default=None, max_length=500)
+    archived: bool = False
 
 
 class TaskPatch(BaseModel):
@@ -26,6 +27,7 @@ class TaskPatch(BaseModel):
     planned_week: date | None = None
     blocked: bool | None = None
     block_reason: str | None = Field(default=None, max_length=500)
+    archived: bool | None = None
     expected_updated_at: datetime | None = None
 
 
