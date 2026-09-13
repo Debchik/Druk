@@ -10,7 +10,7 @@ import './artwork.css'
 import './stability.css'
 
 const CACHE_MAX_AGE=24*60*60_000
-const CACHE_PREFIX='druk-query-cache:v3:'
+const CACHE_PREFIX='druk-query-cache:v4:'
 const queryClient=new QueryClient({defaultOptions:{queries:{staleTime:5*60_000,gcTime:CACHE_MAX_AGE,refetchOnWindowFocus:false,refetchOnReconnect:true,retry:(n,e)=>{const status=(e as {status?:number}).status;return (!status||![401,403,404,409,422].includes(status))&&n<2}}}})
 let activeUser:string|null=null
 let saveTimer:number|undefined
