@@ -80,3 +80,12 @@
 .task-list-card .task-table::-webkit-scrollbar-thumb,.board-col::-webkit-scrollbar-thumb{background:#cdd8c9;border-radius:999px;border:2px solid transparent;background-clip:padding-box}
 [data-theme="dark"] .task-list-card .task-row.table-head{background:var(--panel-bg,#1f2420)}
 @media(max-width:900px){.program-answer-form .markdown-preview,.program-answers .program-markdown-editor .markdown-preview{max-height:300px}}
+
+/* task-history-scroll-v1 */
+.task-list-card .task-table{max-height:clamp(430px,64vh,720px);overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable both-edges}
+.board-col{max-height:clamp(430px,64vh,720px);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.task-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;min-width:0}
+.task-archive-link{border:0;background:transparent;color:#657066;font-size:10px;font-weight:650;padding:4px 5px;white-space:nowrap}
+.task-archive-link:hover{color:#397b2b;background:#f2f7ef;border-radius:6px}
+.task-archive-meta{display:block;margin-top:4px;color:#7f887f;font-size:10px;font-weight:550}
+@media(max-width:900px){.task-list-card .task-table,.board-col{max-height:68vh}.task-row-actions{align-items:flex-end;flex-direction:column;gap:2px}}
